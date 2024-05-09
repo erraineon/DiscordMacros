@@ -1,0 +1,40 @@
+name: Create release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        required: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+    - name: Publish
+      run: dotnet publish -r win-x64 -o bin
+    - name: Zip
+      uses: montudor/action-zip@v1
+      with:
+        args: sh -c "cd bin && zip -qq -r ../bin.zip ."
+    - name: Release
+      uses: actions/create-release@v1
+      id: release
+      with:
+        release_name: Release ${{ github.event.inputs.version }}
+        tag_name: ${{ github.event.inputs.version }}
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+    - name: Upload Windows artifact
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.release.outputs.upload_url }}
+        asset_path: ./bin.zip
+        asset_name: DiscordMacros.win-x64.zip
+        asset_content_type: application/zip
