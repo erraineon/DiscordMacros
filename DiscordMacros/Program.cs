@@ -35,7 +35,7 @@ do
     if (macro != null)
     {
         var validCommands = (macro.Commands ?? Enumerable.Empty<Command>())
-            .Where(x => x is { Server: not null, Channel: not null, Text: not null });
+            .Where(x => x is { Server: not null, Channel: not null });
 
         foreach (var command in validCommands)
         {
@@ -46,8 +46,17 @@ do
 
             if (channel != null)
             {
-                await channel.SendMessageAsync(command.Text);
-                await Task.Delay(TimeSpan.FromSeconds(macro.SecondsBetweenCommands));
+                var text = command.Text ??
+                    Random.Shared
+                    .GetItems(command.Choices!, 1, x => x.Weight)
+                    .Select(x => x.Text)
+                    .SingleOrDefault(x => !string.IsNullOrEmpty(x));
+
+                if (!string.IsNullOrEmpty(text))
+                {
+                    await channel.SendMessageAsync(text);
+                    await Task.Delay(TimeSpan.FromSeconds(macro.SecondsBetweenCommands));
+                }
             }
         }
     }
@@ -65,4 +74,36 @@ public class Command
     public string? Server { get; set; }
     public string? Channel { get; set; }
     public string? Text { get; set; }
+    public List<CommandText>? Choices { get; set; }
+}
+
+public class CommandText
+{
+    public string? Text { get; set; }
+    public float Weight { get; set; } = 1;
+}
+
+public static class RandomExtensions
+{
+    public static IEnumerable<T> GetItems<T>(this Random random, IEnumerable<T> choices, int length, Func<T, float> weightFunction)
+    {
+        var itemsAndWeight = choices
+            .Select(item => (item, weight: weightFunction(item)))
+            .Where(t => t.weight > 0)
+            .ToList();
+
+        for (var i = 0; i < length; i++)
+            if (itemsAndWeight.Any())
+            {
+                var totalWeight = itemsAndWeight.Sum(t => t.weight);
+                var minimumWeightToPick = random.NextDouble() * totalWeight;
+                var weightAccumulator = 0f;
+                var (selectedItem, _, selectedIndex) = itemsAndWeight
+                    .Select((t, index) => (t.item, t.weight, index))
+                    .SkipWhile(t => (weightAccumulator += t.weight) < minimumWeightToPick)
+                    .First();
+                yield return selectedItem;
+                itemsAndWeight.RemoveAt(selectedIndex);
+            }
+    }
 }
